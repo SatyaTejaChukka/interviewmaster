@@ -1,0 +1,111 @@
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>InterviewMaster AI</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        darkMode: 'class',
+        theme: {
+          extend: {
+            colors: {
+              dark: {
+                bg: '#0f172a',
+                card: '#1e293b',
+                border: '#334155'
+              }
+            }
+          }
+        }
+      }
+    </script>
+    <style>
+      /* View Transitions API Core Orchestration */
+      ::view-transition-old(root),
+      ::view-transition-new(root) {
+        animation: none;
+        mix-blend-mode: normal;
+        will-change: clip-path, transform, opacity;
+      }
+
+      /* Stack control for the Ripple Layering */
+      ::view-transition-old(root) {
+        z-index: 1;
+      }
+      ::view-transition-new(root) {
+        z-index: 9999;
+      }
+
+      .dark::view-transition-old(root) {
+        z-index: 9999;
+      }
+      .dark::view-transition-new(root) {
+        z-index: 1;
+      }
+
+      /* The Amazing Ripple Animation */
+      @keyframes ripple-reveal {
+        from {
+          clip-path: circle(0px at var(--x, 50%) var(--y, 50%));
+        }
+        to {
+          /* Using 150vmax to ensure the circle clears screen corners at a high velocity */
+          clip-path: circle(150vmax at var(--x, 50%) var(--y, 50%));
+        }
+      }
+
+      /* Subtle Scale/Fade for the "Surprise" factor */
+      @keyframes theme-breathe {
+        from {
+          opacity: 0;
+          transform: scale(0.98);
+        }
+        to {
+          opacity: 1;
+          transform: scale(1);
+        }
+      }
+
+      /* Active Transition State */
+      [data-theme-transition="active"]::view-transition-new(root) {
+        animation: 
+          800ms cubic-bezier(0.5, 0, 0, 1) both ripple-reveal,
+          500ms ease-out both theme-breathe;
+      }
+
+      /* Cross-fade for the old view to make it disappear smoothly */
+      [data-theme-transition="active"]::view-transition-old(root) {
+        animation: 400ms ease-out forwards fade-out;
+      }
+
+      @keyframes fade-out {
+        to { opacity: 0; }
+      }
+
+      /* Base transition for fallback support */
+      body {
+        transition: background-color 0.4s ease;
+      }
+    </style>
+  <script type="importmap">
+{
+  "imports": {
+    "lucide-react": "https://esm.sh/lucide-react@^0.562.0",
+    "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
+    "react/": "https://esm.sh/react@^19.2.3/",
+    "react": "https://esm.sh/react@^19.2.3",
+    "react-router-dom": "https://esm.sh/react-router-dom@^7.11.0",
+    "@google/genai": "https://esm.sh/@google/genai@^1.34.0",
+    "recharts": "https://esm.sh/recharts@^3.6.0"
+  }
+}
+</script>
+</head>
+  <body class="transition-colors duration-200">
+    <div id="root"></div>
+    <script type="module" src="/index.tsx"></script>
+  </body>
+</html>
