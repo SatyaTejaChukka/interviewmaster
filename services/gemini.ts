@@ -8,7 +8,7 @@ import { Question, ValidationResponse, InterviewReport, Difficulty, AspectRatio,
  */
 const callGeminiPro = async (logic: (ai: any) => Promise<any>) => {
   try {
-    const ai = new GoogleGenAI({ apiKey: process.env.VITE_GEMINI_API_KEY });
+    const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_GEMINI_API_KEY });
     return await logic(ai);
   } catch (error: any) {
     console.error("Gemini Pro Call Error:", error);
@@ -26,7 +26,7 @@ const callGeminiPro = async (logic: (ai: any) => Promise<any>) => {
 // --- Interview Logic ---
 
 export const generateSubtopics = async (topic: string): Promise<string[]> => {
-  const ai = new GoogleGenAI({ apiKey: process.env.VITE_GEMINI_API_KEY });
+  const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_GEMINI_API_KEY });
   try {
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
@@ -207,7 +207,7 @@ export const generateInterviewReport = async (
 export type CoachPersona = 'balanced' | 'dsa' | 'architect';
 
 export const createChatSession = (history?: any[], persona: CoachPersona = 'balanced') => {
-  const ai = new GoogleGenAI({ apiKey: process.env.VITE_GEMINI_API_KEY });
+  const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_GEMINI_API_KEY });
   
   const instructions: Record<CoachPersona, string> = {
     balanced: "You are a Senior Engineering Manager at a Tier-1 tech company. You provide balanced coaching on technical accuracy, behavioral nuances, and industry culture. Your tone is supportive but professional.",
