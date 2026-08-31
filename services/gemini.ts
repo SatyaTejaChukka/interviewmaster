@@ -113,14 +113,24 @@ export const generateQuestion = async (topic: string, subtopic: string, difficul
     `;
 
     return await provider.generateValidatedContent(prompt, (text) => {
-      const data = parseJsonFromLLM<{ id?: string; text?: string; options?: string[] }>(text);
-      if (!data || !data.text || !Array.isArray(data.options) || data.options.length < 2) {
+      const data = parseJsonFromLLM<any>(text);
+      if (!data) return null;
+
+      const questionText = data.text || data.question || data.prompt || data.questionText || data.scenario;
+      let rawOptions = data.options || data.choices || data.answers || data.possibleAnswers;
+
+      if (rawOptions && !Array.isArray(rawOptions) && typeof rawOptions === 'object') {
+        rawOptions = Object.values(rawOptions);
+      }
+
+      if (!questionText || !Array.isArray(rawOptions) || rawOptions.length < 2) {
         return null;
       }
+
       return {
-        id: data.id || crypto.randomUUID(),
-        text: data.text,
-        options: data.options,
+        id: String(data.id || crypto.randomUUID()),
+        text: String(questionText),
+        options: rawOptions.map((opt: any) => String(opt)),
       };
     });
   } catch (error) {
@@ -163,8 +173,28 @@ export const validateAnswer = async (
     `;
 
     return await provider.generateValidatedContent(prompt, (text) => {
-      const parsed = parseJsonFromLLM<ValidationResponse>(text);
-      return parsed && parsed.status && parsed.feedback ? parsed : null;
+      const data = parseJsonFromLLM<any>(text);
+      if (!data) return null;
+
+      let status = data.status;
+      if (!status) {
+        if (data.isCorrect === true || data.correct === true) status = 'correct';
+        else if (data.isCorrect === false || data.correct === false) status = 'incorrect';
+        else status = 'deviating';
+      }
+
+      const feedback = data.feedback || data.explanation || data.reasoning || data.message || 'Feedback recorded.';
+      const hint = data.hint || data.suggestion || undefined;
+      const shouldProceed = Boolean(data.shouldProceed ?? (attemptCount >= 2));
+      const correctAnswer = data.correctAnswer || data.correct_answer || undefined;
+
+      return {
+        status: status === 'correct' || status === 'incorrect' || status === 'deviating' ? status : 'incorrect',
+        feedback: String(feedback),
+        hint: hint ? String(hint) : undefined,
+        shouldProceed,
+        correctAnswer: correctAnswer ? String(correctAnswer) : undefined,
+      };
     });
   } catch (error) {
     console.error("Error validating answer:", error);
@@ -197,8 +227,30 @@ export const generateInterviewReport = async (
     `;
 
     return await provider.generateValidatedContent(prompt, (text) => {
-      const parsed = parseJsonFromLLM<InterviewReport>(text);
-      return parsed && typeof parsed.overallScore === 'number' && parsed.summary ? parsed : null;
+      const data = parseJsonFromLLM<any>(text);
+      if (!data) return null;
+
+      const overallScore = typeof data.overallScore === 'number'
+        ? data.overallScore
+        : typeof data.score === 'number'
+        ? data.score
+        : 70;
+
+      const summary = data.summary || data.overview || data.feedback || 'Interview completed.';
+      const weakAreas = Array.isArray(data.weakAreas) ? data.weakAreas : Array.isArray(data.weaknesses) ? data.weaknesses : [];
+      const strongAreas = Array.isArray(data.strongAreas) ? data.strongAreas : Array.isArray(data.strengths) ? data.strengths : [];
+      const suggestedResources = Array.isArray(data.suggestedResources) ? data.suggestedResources : [];
+
+      return {
+        overallScore: Math.min(100, Math.max(0, overallScore)),
+        summary: String(summary),
+        weakAreas: weakAreas.map((w: any) => String(w)),
+        strongAreas: strongAreas.map((s: any) => String(s)),
+        suggestedResources: suggestedResources.map((r: any) => ({
+          title: String(r.title || 'Recommended Resource'),
+          url: String(r.url || '#'),
+        })),
+      };
     });
   } catch (error) {
     console.error("Error generating report:", error);

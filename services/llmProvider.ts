@@ -14,7 +14,6 @@ const NVIDIA_INVOKE_URL = 'https://integrate.api.nvidia.com/v1/chat/completions'
 const GROQ_MODELS = [
   'llama-3.3-70b-versatile',
   'llama-3.1-8b-instant',
-  'gemma2-9b-it',
 ] as const;
 
 const GEMINI_MODELS = [
