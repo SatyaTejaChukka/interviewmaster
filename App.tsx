@@ -1,14 +1,15 @@
 import React, { useState, useEffect, lazy, Suspense } from 'react';
 import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
 import Layout from './components/Layout';
+import { StorageService } from './services/storage';
+import { User } from './types';
+import { initializeLLMProvider } from './services/gemini';
+
 const Dashboard = lazy(() => import('./pages/Dashboard'));
 const InterviewSession = lazy(() => import('./pages/InterviewSession'));
 const ChatAssistant = lazy(() => import('./pages/ChatAssistant'));
 const Auth = lazy(() => import('./pages/Auth'));
 const Profile = lazy(() => import('./pages/Profile'));
-import { StorageService } from './services/storage';
-import { User } from './types';
-import { initializeLLMProvider } from './services/gemini';
 
 export const AuthContext = React.createContext<{
   user: User | null;
