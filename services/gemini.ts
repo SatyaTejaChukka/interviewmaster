@@ -1,23 +1,6 @@
 
-import { GoogleGenerativeAI } from "@google/generative-ai";
 import { Question, ValidationResponse, InterviewReport, Difficulty, APIKeyConfig, LLMProvider, LLMChatMessage } from '../types';
 import { getLLMProvider } from './llmProvider';
-
-/**
- * Internal helper to handle calls to Gemini Pro models.
- * Falls back to alternative providers if configured.
- */
-const getGeminiClient = () => {
-  const apiKey = (import.meta as any).env.VITE_GEMINI_API_KEY;
-  
-  if (!apiKey) {
-    throw new Error(
-      'Gemini API Key is not configured. Please ensure VITE_GEMINI_API_KEY is set in your environment variables.'
-    );
-  }
-  
-  return new GoogleGenerativeAI(apiKey);
-};
 
 /**
  * Initialize LLM provider with user's configured API keys
@@ -245,25 +228,4 @@ export const streamCoachResponse = async function* (
   ];
 
   yield* provider.streamChat(messages);
-};
-
-// --- Image Generation ---
-
-export const generateTopicBadge = async (prompt: string): Promise<string | null> => {
-  try {
-    const genAI = getGeminiClient();
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
-    
-    const response = await model.generateContent(
-      `Professional achievement icon for: ${prompt}. Clean, modern, centered vector style.`
-    );
-    
-    // The generative AI SDK returns image data differently
-    // For this implementation, we'll return null as image generation requires special handling
-    console.log("Image generation requested for:", prompt);
-    return null;
-  } catch (error: any) {
-    console.error("Error generating badge:", error);
-    return null;
-  }
 };
