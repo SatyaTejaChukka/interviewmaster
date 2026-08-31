@@ -5,6 +5,45 @@ export enum Difficulty {
   Advanced = "Advanced",
 }
 
+export enum LLMProvider {
+  Nvidia = 'nvidia',
+  Gemini = 'gemini',
+  Groq = 'groq',
+  Claude = 'claude',
+  Mistral = 'mistral',
+  OpenRouter = 'openrouter',
+}
+
+export interface LLMChatMessage {
+  role: 'system' | 'user' | 'assistant';
+  content: string;
+}
+
+export interface APIKeyConfig {
+  provider: LLMProvider;
+  apiKey: string;
+  isActive: boolean;
+}
+
+export interface ProviderUsageStats {
+  provider: LLMProvider;
+  requestsToday: number;
+  tokensConsumed: number;
+  successCount: number;
+  failureCount: number;
+  lastUsed: number | null;
+  avgResponseTime: number; // milliseconds
+  isHealthy: boolean;
+}
+
+export interface UsageDashboard {
+  totalRequests: number;
+  totalTokens: number;
+  estimatedCost: number;
+  providerStats: ProviderUsageStats[];
+  lastReset: number;
+}
+
 export interface User {
   id: string;
   name: string;
@@ -13,6 +52,8 @@ export interface User {
   avatarUrl?: string;
   preferences?: {
     theme: 'light' | 'dark';
+    apiKeys?: APIKeyConfig[];
+    primaryProvider?: LLMProvider;
   };
 }
 
@@ -58,20 +99,4 @@ export interface ValidationResponse {
   hint?: string;
   correctAnswer?: string; // Revealed if too many attempts
   shouldProceed: boolean;
-}
-
-// Aspect ratios officially supported by Gemini image generation models
-export enum AspectRatio {
-  "1:1" = "1:1",
-  "3:4" = "3:4",
-  "4:3" = "4:3",
-  "9:16" = "9:16",
-  "16:9" = "16:9"
-}
-
-// Image sizes supported by gemini-3-pro-image-preview
-export enum ImageSize {
-  "1K" = "1K",
-  "2K" = "2K",
-  "4K" = "4K"
 }

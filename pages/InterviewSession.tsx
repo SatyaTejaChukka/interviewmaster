@@ -1,13 +1,23 @@
 
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { generateSubtopics, generateQuestion, validateAnswer, generateInterviewReport } from '../services/gemini';
+import { generateSubtopics, generateQuestion, validateAnswer, generateInterviewReport, initializeLLMProvider } from '../services/gemini';
 import { StorageService } from '../services/storage';
 import { Question, AnswerAttempt, InterviewSession as ISession, InterviewReport, Difficulty } from '../types';
 import { Send, AlertCircle, CheckCircle, XCircle, ChevronRight, Loader2, BookOpen, BarChart3, Sprout, Flame, Star, Brain, Target, Info, Trophy, Zap, ShieldCheck, ArrowRight } from 'lucide-react';
+import { AuthContext } from '../App';
 
 const InterviewSession: React.FC = () => {
   const navigate = useNavigate();
+  const { user } = useContext(AuthContext);
+  
+  // Initialize LLM provider with user's API keys on mount
+  useEffect(() => {
+    if (user?.preferences?.apiKeys) {
+      initializeLLMProvider(user.preferences.apiKeys, user.preferences.primaryProvider);
+    }
+  }, [user]);
+  
   // Setup State
   const [step, setStep] = useState<'topic' | 'subtopic' | 'difficulty' | 'interview' | 'report'>('topic');
   const [topic, setTopic] = useState('');
@@ -50,9 +60,14 @@ const InterviewSession: React.FC = () => {
   const handleTopicSubmit = async () => {
     if (!topic.trim()) return;
     setLoading(true);
-    const result = await generateSubtopics(topic);
-    setSubtopics(result);
-    setStep('subtopic');
+    try {
+      const result = await generateSubtopics(topic);
+      setSubtopics(result);
+      setStep('subtopic');
+    } catch (e: any) {
+      const errorMsg = e?.message || "Failed to generate subtopics. Please check your API key.";
+      setFeedback({ type: 'error', message: errorMsg });
+    }
     setLoading(false);
   };
 
@@ -70,8 +85,9 @@ const InterviewSession: React.FC = () => {
       setCurrentQuestion(q);
       setStep('interview');
       prefetchNext([], q.id);
-    } catch (e) {
-      setFeedback({ type: 'error', message: "Failed to start interview." });
+    } catch (e: any) {
+      const errorMsg = e?.message || "Failed to start interview. Please check your API key.";
+      setFeedback({ type: 'error', message: errorMsg });
     }
     setLoading(false);
   };
@@ -92,14 +108,22 @@ const InterviewSession: React.FC = () => {
       prefetchNext([...history], prefetchedQuestion.id);
     } else {
       setLoading(true);
-      const prevQuestions = history.map(h => h.questionId);
-      const q = await generateQuestion(topic, selectedSubtopic, selectedDifficulty, prevQuestions);
-      setCurrentQuestion(q);
-      setAttempts(0);
-      setFeedback(null);
-      setExplanation('');
-      setSelectedOptionIndex(null);
-      setLoading(false);
+      try {
+        const prevQuestions = history.map(h => h.questionId);
+        const q = await generateQuestion(topic, selectedSubtopic, selectedDifficulty, prevQuestions);
+        setCurrentQuestion(q);
+        setAttempts(0);
+        setFeedback(null);
+        setExplanation('');
+        setSelectedOptionIndex(null);
+      } catch (e: any) {
+        const errorMsg =
+          e?.message ||
+          'Failed to load the next question. A provider may be rate-limited right now.';
+        setFeedback({ type: 'error', message: errorMsg, canSkip: false });
+      } finally {
+        setLoading(false);
+      }
     }
   };
 
@@ -108,48 +132,56 @@ const InterviewSession: React.FC = () => {
     
     setLoading(true);
     const attemptNum = attempts + 1;
-    const result = await validateAnswer(currentQuestion, selectedOptionIndex, explanation, attemptNum);
     
-    setAttempts(attemptNum);
+    try {
+      const result = await validateAnswer(currentQuestion, selectedOptionIndex, explanation, attemptNum);
+      
+      setAttempts(attemptNum);
 
-    if (result.status === 'correct' || result.shouldProceed) {
-        const attempt: AnswerAttempt = {
-            questionId: currentQuestion.id,
-            selectedOptionIndex,
-            explanation,
-            isCorrect: result.status === 'correct',
-            feedback: result.feedback,
-            timestamp: Date.now()
-        };
-        const newHistory = [...history, attempt];
-        setHistory(newHistory);
+      if (result.status === 'correct' || result.shouldProceed) {
+          const attempt: AnswerAttempt = {
+              questionId: currentQuestion.id,
+              selectedOptionIndex,
+              explanation,
+              isCorrect: result.status === 'correct',
+              feedback: result.feedback,
+              timestamp: Date.now()
+          };
+          const newHistory = [...history, attempt];
+          setHistory(newHistory);
 
-        if (result.status === 'correct') {
-            setFeedback({ type: 'success', message: result.feedback, canSkip: true });
-        } else {
-            setFeedback({ 
-                type: 'info', 
-                message: `Max attempts reached. Correct Answer: "${result.correctAnswer}". ${result.feedback}`,
-                canSkip: true
-            });
-        }
+          if (result.status === 'correct') {
+              setFeedback({ type: 'success', message: result.feedback, canSkip: true });
+          } else {
+              setFeedback({ 
+                  type: 'info', 
+                  message: `Max attempts reached. Correct Answer: "${result.correctAnswer}". ${result.feedback}`,
+                  canSkip: true
+              });
+          }
 
-        // Reduced delay to 2.5s for faster feel
-        timerRef.current = window.setTimeout(() => {
-            if (newHistory.length >= 5) {
-                finishInterview(newHistory);
-            } else {
-                moveToNextQuestion();
-            }
-        }, 2500);
+          timerRef.current = window.setTimeout(() => {
+              if (newHistory.length >= 5) {
+                  finishInterview(newHistory);
+              } else {
+                  moveToNextQuestion();
+              }
+          }, 2500);
 
-    } else {
-        setFeedback({ 
-            type: result.status === 'deviating' ? 'warning' : 'error', 
-            message: result.feedback + (result.hint ? ` Hint: ${result.hint}` : '') 
-        });
+      } else {
+          setFeedback({ 
+              type: result.status === 'deviating' ? 'warning' : 'error', 
+              message: result.feedback + (result.hint ? ` Hint: ${result.hint}` : '') 
+          });
+      }
+    } catch (e: any) {
+      const errorMsg =
+        e?.message ||
+        'Answer evaluation failed. The current provider may be rate-limited, so please try again.';
+      setFeedback({ type: 'error', message: errorMsg });
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   const finishInterview = async (finalHistory: AnswerAttempt[]) => {
@@ -181,6 +213,16 @@ const InterviewSession: React.FC = () => {
     return (
       <div className="max-w-2xl mx-auto mt-10 px-4">
         <h1 className="text-3xl font-bold text-gray-900 dark:text-slate-100 mb-6">Start a New Interview</h1>
+        
+        {feedback && (
+          <div className={`mb-6 p-4 rounded-lg flex items-center gap-3 ${
+            feedback.type === 'error' ? 'bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800' : 'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800'
+          }`}>
+             {feedback.type === 'error' ? <XCircle size={20} /> : <Info size={20} />}
+             <p>{feedback.message}</p>
+          </div>
+        )}
+
         <div className="bg-white dark:bg-slate-900 p-8 rounded-xl shadow-sm border border-gray-200 dark:border-slate-800">
           <label className="block text-lg font-medium text-gray-700 dark:text-slate-300 mb-4">What topic do you want to practice?</label>
           <div className="flex flex-col sm:flex-row gap-4">
@@ -209,6 +251,16 @@ const InterviewSession: React.FC = () => {
     return (
       <div className="max-w-4xl mx-auto mt-10 px-4">
         <h2 className="text-2xl font-bold text-gray-900 dark:text-slate-100 mb-6">Select a Focus Area for {topic}</h2>
+        
+        {feedback && (
+          <div className={`mb-6 p-4 rounded-lg flex items-center gap-3 ${
+            feedback.type === 'error' ? 'bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800' : 'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800'
+          }`}>
+             {feedback.type === 'error' ? <XCircle size={20} /> : <Info size={20} />}
+             <p>{feedback.message}</p>
+          </div>
+        )}
+
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {subtopics.map((sub, idx) => (
             <button
@@ -232,12 +284,21 @@ const InterviewSession: React.FC = () => {
     return (
       <div className="max-w-6xl mx-auto mt-10 px-4 pb-12">
         <div className="text-center mb-12">
-          <h2 className="text-4xl font-black text-gray-900 dark:text-slate-100 mb-4">Choose Your Challenge</h2>
+            <h2 className="text-4xl font-black text-gray-900 dark:text-slate-100 mb-4">Choose Your Challenge</h2>
           <p className="text-gray-500 dark:text-slate-400 text-lg max-w-2xl mx-auto">
             Ready to test your expertise in <span className="font-bold text-indigo-600 dark:text-indigo-400 underline decoration-indigo-200">{selectedSubtopic}</span>? Pick a difficulty that matches your career level.
           </p>
         </div>
         
+        {feedback && (
+          <div className={`mb-6 p-4 max-w-2xl mx-auto rounded-lg flex items-center gap-3 ${
+            feedback.type === 'error' ? 'bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800' : 'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800'
+          }`}>
+             {feedback.type === 'error' ? <XCircle size={20} /> : <Info size={20} />}
+             <p>{feedback.message}</p>
+          </div>
+        )}
+
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
           {[
             { 
