@@ -1,8 +1,9 @@
-import { InterviewSession, User } from '../types';
+import { InterviewSession, User, ActiveInterviewState } from '../types';
 
 const USER_KEY = 'interview_master_user';
 const SESSIONS_KEY = 'interview_master_sessions';
 const CHAT_KEY = 'interview_master_chat';
+const ACTIVE_INTERVIEW_KEY = 'interview_master_active_session';
 
 export const StorageService = {
   getUser: (): User | null => {
@@ -25,7 +26,6 @@ export const StorageService = {
 
   saveSession: (session: InterviewSession) => {
     const sessions = StorageService.getSessions();
-    // Check if session exists (update) or new
     const index = sessions.findIndex(s => s.id === session.id);
     if (index >= 0) {
       sessions[index] = session;
@@ -56,5 +56,26 @@ export const StorageService = {
 
   clearChatHistory: () => {
     localStorage.removeItem(CHAT_KEY);
-  }
+  },
+
+  getActiveInterview: (): ActiveInterviewState | null => {
+    try {
+      const data = localStorage.getItem(ACTIVE_INTERVIEW_KEY);
+      return data ? JSON.parse(data) : null;
+    } catch {
+      return null;
+    }
+  },
+
+  saveActiveInterview: (state: ActiveInterviewState) => {
+    try {
+      localStorage.setItem(ACTIVE_INTERVIEW_KEY, JSON.stringify(state));
+    } catch (e) {
+      console.warn('Failed to save active interview state', e);
+    }
+  },
+
+  clearActiveInterview: () => {
+    localStorage.removeItem(ACTIVE_INTERVIEW_KEY);
+  },
 };

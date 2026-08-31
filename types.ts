@@ -1,4 +1,3 @@
-
 export enum Difficulty {
   Beginner = "Beginner",
   Intermediate = "Intermediate",
@@ -61,7 +60,7 @@ export interface Question {
   id: string;
   text: string;
   options: string[];
-  correctOptionIndex?: number; // Internal use, maybe hidden from client initially
+  correctOptionIndex?: number;
 }
 
 export interface AnswerAttempt {
@@ -97,6 +96,22 @@ export interface ValidationResponse {
   status: 'correct' | 'incorrect' | 'deviating';
   feedback: string;
   hint?: string;
-  correctAnswer?: string; // Revealed if too many attempts
+  correctAnswer?: string;
   shouldProceed: boolean;
+}
+
+export interface ActiveInterviewState {
+  step: 'topic' | 'subtopic' | 'difficulty' | 'interview' | 'report';
+  topic: string;
+  subtopics: string[];
+  selectedSubtopic: string;
+  selectedDifficulty: Difficulty;
+  currentQuestion: Question | null;
+  prefetchedQuestion: Question | null;
+  history: AnswerAttempt[];
+  attempts: number;
+  explanation: string;
+  selectedOptionIndex: number | null;
+  report: InterviewReport | null;
+  updatedAt: number;
 }

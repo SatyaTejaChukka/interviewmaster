@@ -1,10 +1,9 @@
-
 import React, { useState, useRef, useEffect, useCallback, useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { generateSubtopics, generateQuestion, validateAnswer, generateInterviewReport, initializeLLMProvider } from '../services/gemini';
 import { StorageService } from '../services/storage';
 import { Question, AnswerAttempt, InterviewSession as ISession, InterviewReport, Difficulty } from '../types';
-import { Send, AlertCircle, CheckCircle, XCircle, ChevronRight, Loader2, BookOpen, BarChart3, Sprout, Flame, Star, Brain, Target, Info, Trophy, Zap, ShieldCheck, ArrowRight } from 'lucide-react';
+import { Send, AlertCircle, CheckCircle, XCircle, ChevronRight, Loader2, BookOpen, BarChart3, Sprout, Flame, Star, Brain, Target, Info, Trophy, Zap, ShieldCheck, ArrowRight, RotateCcw, Play } from 'lucide-react';
 import { AuthContext } from '../App';
 
 const InterviewSession: React.FC = () => {
@@ -17,29 +16,96 @@ const InterviewSession: React.FC = () => {
       initializeLLMProvider(user.preferences.apiKeys, user.preferences.primaryProvider);
     }
   }, [user]);
-  
-  // Setup State
-  const [step, setStep] = useState<'topic' | 'subtopic' | 'difficulty' | 'interview' | 'report'>('topic');
-  const [topic, setTopic] = useState('');
-  const [subtopics, setSubtopics] = useState<string[]>([]);
-  const [selectedSubtopic, setSelectedSubtopic] = useState('');
-  const [selectedDifficulty, setSelectedDifficulty] = useState<Difficulty>(Difficulty.Beginner);
+
+  // Setup State from Saved Active Session if available
+  const savedState = StorageService.getActiveInterview();
+
+  const [step, setStep] = useState<'topic' | 'subtopic' | 'difficulty' | 'interview' | 'report'>(
+    savedState?.step && savedState.step !== 'report' ? savedState.step : 'topic'
+  );
+  const [topic, setTopic] = useState(savedState?.topic || '');
+  const [subtopics, setSubtopics] = useState<string[]>(savedState?.subtopics || []);
+  const [selectedSubtopic, setSelectedSubtopic] = useState(savedState?.selectedSubtopic || '');
+  const [selectedDifficulty, setSelectedDifficulty] = useState<Difficulty>(
+    savedState?.selectedDifficulty || Difficulty.Beginner
+  );
   const [loading, setLoading] = useState(false);
 
   // Interview State
-  const [currentQuestion, setCurrentQuestion] = useState<Question | null>(null);
-  const [prefetchedQuestion, setPrefetchedQuestion] = useState<Question | null>(null);
-  const [history, setHistory] = useState<AnswerAttempt[]>([]);
-  const [attempts, setAttempts] = useState(0);
+  const [currentQuestion, setCurrentQuestion] = useState<Question | null>(savedState?.currentQuestion || null);
+  const [prefetchedQuestion, setPrefetchedQuestion] = useState<Question | null>(savedState?.prefetchedQuestion || null);
+  const [history, setHistory] = useState<AnswerAttempt[]>(savedState?.history || []);
+  const [attempts, setAttempts] = useState(savedState?.attempts || 0);
   const [feedback, setFeedback] = useState<{ type: 'info' | 'success' | 'error' | 'warning', message: string, canSkip?: boolean } | null>(null);
   
   // Inputs
-  const [explanation, setExplanation] = useState('');
-  const [selectedOptionIndex, setSelectedOptionIndex] = useState<number | null>(null);
+  const [explanation, setExplanation] = useState(savedState?.explanation || '');
+  const [selectedOptionIndex, setSelectedOptionIndex] = useState<number | null>(savedState?.selectedOptionIndex ?? null);
   
   // Report
-  const [report, setReport] = useState<InterviewReport | null>(null);
+  const [report, setReport] = useState<InterviewReport | null>(savedState?.report || null);
   const timerRef = useRef<number | null>(null);
+
+  // Auto-persist in-progress interview state across tab switches / navigation
+  useEffect(() => {
+    if (step === 'interview' && currentQuestion) {
+      StorageService.saveActiveInterview({
+        step,
+        topic,
+        subtopics,
+        selectedSubtopic,
+        selectedDifficulty,
+        currentQuestion,
+        prefetchedQuestion,
+        history,
+        attempts,
+        explanation,
+        selectedOptionIndex,
+        report,
+        updatedAt: Date.now(),
+      });
+    } else if (step === 'topic' || step === 'report') {
+      StorageService.clearActiveInterview();
+    }
+  }, [
+    step,
+    topic,
+    subtopics,
+    selectedSubtopic,
+    selectedDifficulty,
+    currentQuestion,
+    prefetchedQuestion,
+    history,
+    attempts,
+    explanation,
+    selectedOptionIndex,
+    report,
+  ]);
+
+  const handleStartNewInterview = () => {
+    if (
+      step === 'interview' &&
+      !window.confirm(
+        'Are you sure you want to end this interview session? Your current progress will be discarded.'
+      )
+    ) {
+      return;
+    }
+    StorageService.clearActiveInterview();
+    setStep('topic');
+    setTopic('');
+    setSubtopics([]);
+    setSelectedSubtopic('');
+    setSelectedDifficulty(Difficulty.Beginner);
+    setCurrentQuestion(null);
+    setPrefetchedQuestion(null);
+    setHistory([]);
+    setAttempts(0);
+    setFeedback(null);
+    setExplanation('');
+    setSelectedOptionIndex(null);
+    setReport(null);
+  };
 
   // --- PREFETCHING LOGIC ---
   const prefetchNext = useCallback(async (currentHistory: AnswerAttempt[], currentQId?: string) => {
@@ -187,6 +253,7 @@ const InterviewSession: React.FC = () => {
   const finishInterview = async (finalHistory: AnswerAttempt[]) => {
     setStep('report');
     setLoading(true);
+    StorageService.clearActiveInterview();
     try {
       const rep = await generateInterviewReport(topic, finalHistory);
       setReport(rep);
@@ -282,6 +349,7 @@ const InterviewSession: React.FC = () => {
   if (step === 'subtopic') {
     return (
       <div className="max-w-4xl mx-auto mt-10 px-4">
+        <h2 className="text-2xl font-bold text-gray-900 dark:text-slate-100 mb-6">Select a Focus Area for {topic}</h2>
         
         {feedback && (
           <div className={`mb-6 p-4 rounded-lg flex items-center gap-3 ${
@@ -423,8 +491,18 @@ const InterviewSession: React.FC = () => {
     return (
       <div className="max-w-3xl mx-auto py-6 px-4">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
-            <h2 className="text-xl font-bold text-gray-800 dark:text-slate-200">{topic} <span className="text-gray-400">/</span> {selectedSubtopic}</h2>
+            <div>
+              <h2 className="text-xl font-bold text-gray-800 dark:text-slate-200">{topic} <span className="text-gray-400">/</span> {selectedSubtopic}</h2>
+            </div>
             <div className="flex items-center gap-3">
+              <button
+                onClick={handleStartNewInterview}
+                title="End this session and start over"
+                className="px-3 py-1 text-xs font-medium text-slate-500 hover:text-red-600 dark:text-slate-400 dark:hover:text-red-400 border border-slate-200 dark:border-slate-700 rounded-lg hover:bg-red-50 dark:hover:bg-red-950/30 transition-all flex items-center gap-1.5"
+              >
+                <RotateCcw size={13} />
+                <span className="hidden sm:inline">Reset Session</span>
+              </button>
               <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wide flex items-center gap-1 ${
                 selectedDifficulty === Difficulty.Beginner ? 'bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400' :
                 selectedDifficulty === Difficulty.Intermediate ? 'bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-400' :
