@@ -12,6 +12,43 @@ export const initializeLLMProvider = (
   getLLMProvider(apiKeyConfigs, primaryProvider);
 };
 
+function cleanJsonString(text: string): string {
+  let cleaned = text.trim();
+  if (cleaned.startsWith('```json')) {
+    cleaned = cleaned.replace(/^```json\s*/i, '').replace(/\s*```$/, '');
+  } else if (cleaned.startsWith('```')) {
+    cleaned = cleaned.replace(/^```\s*/, '').replace(/\s*```$/, '');
+  }
+  return cleaned;
+}
+
+export function parseJsonFromLLM<T>(text: string): T | null {
+  if (!text) return null;
+  const cleaned = cleanJsonString(text);
+
+  try {
+    return JSON.parse(cleaned) as T;
+  } catch {}
+
+  const objectMatch = text.match(/\{[\s\S]*\}/);
+  if (objectMatch) {
+    try {
+      const sanitized = objectMatch[0].replace(/,\s*([\}\]])/g, '$1');
+      return JSON.parse(sanitized) as T;
+    } catch {}
+  }
+
+  const arrayMatch = text.match(/\[[\s\S]*\]/);
+  if (arrayMatch) {
+    try {
+      const sanitized = arrayMatch[0].replace(/,\s*([\}\]])/g, '$1');
+      return JSON.parse(sanitized) as T;
+    } catch {}
+  }
+
+  return null;
+}
+
 // --- Interview Logic ---
 
 export const generateSubtopics = async (topic: string): Promise<string[]> => {
@@ -20,14 +57,8 @@ export const generateSubtopics = async (topic: string): Promise<string[]> => {
     const prompt = `List 5 distinct sub-topics or focus areas for a technical interview about "${topic}". Return only a JSON array of strings, like: ["Topic 1", "Topic 2", ...]`;
 
     return await provider.generateValidatedContent(prompt, (text) => {
-      const jsonMatch = text.match(/\[[\s\S]*\]/);
-      if (!jsonMatch) return null;
-      try {
-        const parsed = JSON.parse(jsonMatch[0]) as string[];
-        return Array.isArray(parsed) && parsed.length > 0 ? parsed : null;
-      } catch {
-        return null;
-      }
+      const parsed = parseJsonFromLLM<string[]>(text);
+      return Array.isArray(parsed) && parsed.length > 0 ? parsed : null;
     });
   } catch (error) {
     console.error("Error generating subtopics:", error);
@@ -82,21 +113,15 @@ export const generateQuestion = async (topic: string, subtopic: string, difficul
     `;
 
     return await provider.generateValidatedContent(prompt, (text) => {
-      const jsonMatch = text.match(/\{[\s\S]*\}/);
-      if (!jsonMatch) return null;
-      try {
-        const data = JSON.parse(jsonMatch[0]);
-        if (!data.text || !Array.isArray(data.options) || data.options.length < 2) {
-          return null;
-        }
-        return {
-          id: data.id || crypto.randomUUID(),
-          text: data.text,
-          options: data.options,
-        };
-      } catch {
+      const data = parseJsonFromLLM<{ id?: string; text?: string; options?: string[] }>(text);
+      if (!data || !data.text || !Array.isArray(data.options) || data.options.length < 2) {
         return null;
       }
+      return {
+        id: data.id || crypto.randomUUID(),
+        text: data.text,
+        options: data.options,
+      };
     });
   } catch (error) {
     console.error("Error generating question:", error);
@@ -138,14 +163,8 @@ export const validateAnswer = async (
     `;
 
     return await provider.generateValidatedContent(prompt, (text) => {
-      const jsonMatch = text.match(/\{[\s\S]*\}/);
-      if (!jsonMatch) return null;
-      try {
-        const parsed = JSON.parse(jsonMatch[0]) as ValidationResponse;
-        return parsed.status && parsed.feedback ? parsed : null;
-      } catch {
-        return null;
-      }
+      const parsed = parseJsonFromLLM<ValidationResponse>(text);
+      return parsed && parsed.status && parsed.feedback ? parsed : null;
     });
   } catch (error) {
     console.error("Error validating answer:", error);
@@ -178,14 +197,8 @@ export const generateInterviewReport = async (
     `;
 
     return await provider.generateValidatedContent(prompt, (text) => {
-      const jsonMatch = text.match(/\{[\s\S]*\}/);
-      if (!jsonMatch) return null;
-      try {
-        const parsed = JSON.parse(jsonMatch[0]) as InterviewReport;
-        return typeof parsed.overallScore === 'number' && parsed.summary ? parsed : null;
-      } catch {
-        return null;
-      }
+      const parsed = parseJsonFromLLM<InterviewReport>(text);
+      return parsed && typeof parsed.overallScore === 'number' && parsed.summary ? parsed : null;
     });
   } catch (error) {
     console.error("Error generating report:", error);
