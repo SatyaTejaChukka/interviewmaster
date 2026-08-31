@@ -24,12 +24,27 @@ class ErrorBoundary extends Component<Props, State> {
   }
 
   handleReset = () => {
+    const isChunkError =
+      this.state.error?.message.includes('dynamically imported module') ||
+      this.state.error?.message.includes('Loading chunk') ||
+      this.state.error?.message.includes('Failed to fetch');
+
     this.setState({ hasError: false, error: null });
-    window.location.hash = '/';
+
+    if (isChunkError) {
+      window.location.reload();
+    } else {
+      window.location.hash = '/';
+    }
   };
 
   render() {
     if (this.state.hasError) {
+      const isChunkError =
+        this.state.error?.message.includes('dynamically imported module') ||
+        this.state.error?.message.includes('Loading chunk') ||
+        this.state.error?.message.includes('Failed to fetch');
+
       return (
         <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-slate-950 p-4">
           <div className="max-w-md w-full bg-white dark:bg-slate-900 rounded-2xl shadow-xl border border-gray-100 dark:border-slate-800 p-8 text-center">
@@ -49,12 +64,14 @@ class ErrorBoundary extends Component<Props, State> {
               </svg>
             </div>
             <h1 className="text-xl font-bold text-gray-900 dark:text-slate-100 mb-2">
-              Something went wrong
+              {isChunkError ? 'New Version Available' : 'Something went wrong'}
             </h1>
             <p className="text-gray-500 dark:text-slate-400 text-sm mb-6">
-              An unexpected error occurred. Your session data is safe in local storage.
+              {isChunkError
+                ? 'A new update was deployed. Click below to load the latest version.'
+                : 'An unexpected error occurred. Your session data is safe in local storage.'}
             </p>
-            {this.state.error && (
+            {this.state.error && !isChunkError && (
               <pre className="text-left text-xs bg-gray-100 dark:bg-slate-800 text-red-600 dark:text-red-400 rounded-lg p-3 mb-6 overflow-auto max-h-32">
                 {this.state.error.message}
               </pre>
@@ -64,7 +81,7 @@ class ErrorBoundary extends Component<Props, State> {
               onClick={this.handleReset}
               className="w-full py-2.5 px-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium transition-colors"
             >
-              Go to Dashboard
+              {isChunkError ? 'Refresh & Update App' : 'Go to Dashboard'}
             </button>
           </div>
         </div>

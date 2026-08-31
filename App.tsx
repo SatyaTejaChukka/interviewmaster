@@ -5,11 +5,26 @@ import { StorageService } from './services/storage';
 import { User } from './types';
 import { initializeLLMProvider } from './services/gemini';
 
-const Dashboard = lazy(() => import('./pages/Dashboard'));
-const InterviewSession = lazy(() => import('./pages/InterviewSession'));
-const ChatAssistant = lazy(() => import('./pages/ChatAssistant'));
-const Auth = lazy(() => import('./pages/Auth'));
-const Profile = lazy(() => import('./pages/Profile'));
+function lazyWithRetry<T extends React.ComponentType<any>>(
+  factory: () => Promise<{ default: T }>
+) {
+  return lazy(() =>
+    factory().catch((error) => {
+      const hasReloaded = window.sessionStorage.getItem('chunk_reload_attempted');
+      if (!hasReloaded) {
+        window.sessionStorage.setItem('chunk_reload_attempted', 'true');
+        window.location.reload();
+      }
+      throw error;
+    })
+  );
+}
+
+const Dashboard = lazyWithRetry(() => import('./pages/Dashboard'));
+const InterviewSession = lazyWithRetry(() => import('./pages/InterviewSession'));
+const ChatAssistant = lazyWithRetry(() => import('./pages/ChatAssistant'));
+const Auth = lazyWithRetry(() => import('./pages/Auth'));
+const Profile = lazyWithRetry(() => import('./pages/Profile'));
 
 export const AuthContext = React.createContext<{
   user: User | null;
@@ -33,6 +48,7 @@ const App: React.FC = () => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    window.sessionStorage.removeItem('chunk_reload_attempted');
     const storedUser = StorageService.getUser();
     if (storedUser) {
       setUser(storedUser);
