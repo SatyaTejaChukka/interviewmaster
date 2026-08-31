@@ -11,13 +11,12 @@ const STORAGE_KEY = 'llm_usage_stats';
 const RESET_INTERVAL_MS = 24 * 60 * 60 * 1000;
 const NVIDIA_INVOKE_URL = 'https://integrate.api.nvidia.com/v1/chat/completions';
 const GROQ_MODELS = [
-  'llama-3.1-8b-instant',
   'llama-3.3-70b-versatile',
-  'llama3-8b-8192',
-  'llama3-70b-8192',
+  'llama-3.1-8b-instant',
+  'llama-3.2-3b-preview',
+  'llama-3.2-1b-preview',
   'gemma2-9b-it',
   'deepseek-r1-distill-llama-70b',
-  'qwen-2.5-32b',
 ] as const;
 const GEMINI_MODELS = [
   'gemini-2.0-flash',
@@ -533,6 +532,9 @@ export class LLMProviderService {
         });
 
         if (!response.ok) {
+          if (response.status === 401 || response.status === 403) {
+            throw new Error('Invalid or expired Groq API key. Please check your key in Profile.');
+          }
           const errMessage = await this.getErrorMessage(response, `Groq (${model})`);
           lastError = new Error(errMessage);
           console.warn(`Groq model ${model} failed, trying next model:`, errMessage);
@@ -542,6 +544,9 @@ export class LLMProviderService {
         const data = await response.json();
         return this.extractAssistantText(data.choices?.[0]?.message?.content);
       } catch (error) {
+        if ((error as Error).message.includes('Invalid or expired')) {
+          throw error;
+        }
         lastError = error as Error;
         console.warn(`Groq model ${model} fetch failed:`, error);
       }
@@ -614,6 +619,9 @@ export class LLMProviderService {
         });
 
         if (!response.ok) {
+          if (response.status === 401 || response.status === 403) {
+            throw new Error('Invalid or expired OpenRouter API key. Please check your key in Profile.');
+          }
           const errMessage = await this.getErrorMessage(response, `OpenRouter (${model})`);
           lastError = new Error(errMessage);
           console.warn(`OpenRouter model ${model} failed, trying next model:`, errMessage);
@@ -623,6 +631,9 @@ export class LLMProviderService {
         const data = await response.json();
         return this.extractAssistantText(data.choices?.[0]?.message?.content);
       } catch (error) {
+        if ((error as Error).message.includes('Invalid or expired')) {
+          throw error;
+        }
         lastError = error as Error;
         console.warn(`OpenRouter model ${model} fetch failed:`, error);
       }
@@ -840,6 +851,9 @@ export class LLMProviderService {
         });
 
         if (!response.ok) {
+          if (response.status === 401 || response.status === 403) {
+            throw new Error('Invalid or expired Groq API key. Please check your key in Profile.');
+          }
           const errMessage = await this.getErrorMessage(response, `Groq (${model})`);
           lastError = new Error(errMessage);
           console.warn(`Groq chat model ${model} failed, trying next:`, errMessage);
@@ -849,6 +863,9 @@ export class LLMProviderService {
         const data = await response.json();
         return this.extractAssistantText(data.choices?.[0]?.message?.content);
       } catch (error) {
+        if ((error as Error).message.includes('Invalid or expired')) {
+          throw error;
+        }
         lastError = error as Error;
         console.warn(`Groq chat model ${model} fetch failed:`, error);
       }
@@ -940,6 +957,9 @@ export class LLMProviderService {
         });
 
         if (!response.ok) {
+          if (response.status === 401 || response.status === 403) {
+            throw new Error('Invalid or expired OpenRouter API key. Please check your key in Profile.');
+          }
           const errMessage = await this.getErrorMessage(response, `OpenRouter (${model})`);
           lastError = new Error(errMessage);
           console.warn(`OpenRouter chat model ${model} failed, trying next:`, errMessage);
@@ -949,6 +969,9 @@ export class LLMProviderService {
         const data = await response.json();
         return this.extractAssistantText(data.choices?.[0]?.message?.content);
       } catch (error) {
+        if ((error as Error).message.includes('Invalid or expired')) {
+          throw error;
+        }
         lastError = error as Error;
         console.warn(`OpenRouter chat model ${model} fetch failed:`, error);
       }
