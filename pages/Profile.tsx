@@ -231,17 +231,16 @@ const Profile: React.FC = () => {
       </div>
 
       <div className="bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-gray-200 dark:border-slate-800 p-8">
-        <h2 className="text-xl font-bold text-gray-900 dark:text-slate-100 mb-6">API Keys & LLM Providers</h2>
+        <h2 className="text-xl font-bold text-gray-900 dark:text-slate-100 mb-6">AI Provider Settings</h2>
         <p className="text-sm text-gray-500 dark:text-slate-400 mb-4">
-          Add your own API keys to avoid hitting rate limits. Your primary provider is used first, with automatic fallback to alternatives.
+          Connect your own AI provider to power your interviews. Your first provider is used by default, and we'll seamlessly switch to others if needed.
         </p>
 
         {configuredProviderCount < 2 && (
-          <div className="mb-4 bg-red-50 dark:bg-red-900/10 border border-red-200 dark:border-red-800 rounded-lg p-4">
-            <p className="text-sm text-red-800 dark:text-red-200">
-              <strong>Fallback not available:</strong> only {configuredProviderCount} provider
-              {configuredProviderCount === 1 ? ' is' : 's are'} configured. Add a backup key
-              (Groq is free at console.groq.com) so interviews continue when your primary hits its limit.
+          <div className="mb-4 bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-800 rounded-lg p-4">
+            <p className="text-sm text-amber-800 dark:text-amber-200">
+              <strong>Tip:</strong> Adding a second AI provider gives you uninterrupted interviews — if one runs out of free requests, we'll automatically switch to the other.
+              {configuredProviderCount === 0 && <> <a href="https://console.groq.com" target="_blank" rel="noopener noreferrer" className="underline font-medium">Groq</a> and <a href="https://ai.google.dev/gemini-api/docs/api-key" target="_blank" rel="noopener noreferrer" className="underline font-medium">Gemini</a> both offer free API keys.</>}
             </p>
           </div>
         )}
@@ -363,11 +362,11 @@ const Profile: React.FC = () => {
           )}
 
           {apiKeys.length === 0 && (
-            <div className="bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-800 rounded-lg p-4">
-              <p className="text-sm text-amber-800 dark:text-amber-200">
+            <div className="bg-blue-50 dark:bg-blue-900/10 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+              <p className="text-sm text-blue-800 dark:text-blue-200">
                 {envFallbackProviders.length > 0
-                  ? `Using environment key from ${envFallbackProviders.join(' and ')}. Add your own key above if you want a personal provider setup.`
-                  : 'No saved provider keys yet. Add one above or set provider keys in your environment, such as VITE_NVIDIA_API_KEY, VITE_GEMINI_API_KEY, or VITE_GROQ_API_KEY.'}
+                  ? `You're all set — using a pre-configured ${envFallbackProviders.join(' and ')} key. Add your own key above to use a personal account with higher limits.`
+                  : 'No AI provider connected yet. Add a free API key above to get started — Groq and Gemini both offer free tiers with no credit card required.'}
               </p>
             </div>
           )}
