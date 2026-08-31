@@ -10,8 +10,28 @@ import {
 const STORAGE_KEY = 'llm_usage_stats';
 const RESET_INTERVAL_MS = 24 * 60 * 60 * 1000;
 const NVIDIA_INVOKE_URL = 'https://integrate.api.nvidia.com/v1/chat/completions';
-const GROQ_MODEL = 'llama-3.3-70b-versatile';
-const GEMINI_MODELS = ['gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-1.5-flash'] as const;
+const GROQ_MODELS = [
+  'llama-3.3-70b-versatile',
+  'llama-3.1-8b-instant',
+  'llama-3.1-70b-versatile',
+  'llama3-70b-8192',
+  'llama3-8b-8192',
+  'gemma2-9b-it',
+  'mixtral-8x7b-32768',
+] as const;
+const GEMINI_MODELS = [
+  'gemini-2.0-flash',
+  'gemini-2.0-flash-lite',
+  'gemini-1.5-flash',
+  'gemini-1.5-pro',
+] as const;
+const OPENROUTER_MODELS = [
+  'meta-llama/llama-3.3-70b-instruct:free',
+  'meta-llama/llama-3.1-8b-instruct:free',
+  'google/gemini-2.0-flash-exp:free',
+  'mistralai/mistral-7b-instruct:free',
+  'auto',
+] as const;
 
 class RateLimiter {
   private requestQueue: Array<() => Promise<void>> = [];
@@ -495,26 +515,38 @@ export class LLMProviderService {
   }
 
   private async generateWithGroq(apiKey: string, prompt: string): Promise<string> {
-    const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: GROQ_MODEL,
-        messages: [{ role: 'user', content: prompt }],
-        temperature: 0.7,
-        max_tokens: 2000,
-      }),
-    });
+    let lastError: Error | null = null;
+    for (const model of GROQ_MODELS) {
+      try {
+        const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${apiKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            model,
+            messages: [{ role: 'user', content: prompt }],
+            temperature: 0.7,
+            max_tokens: 2000,
+          }),
+        });
 
-    if (!response.ok) {
-      throw new Error(await this.getErrorMessage(response, 'Groq'));
+        if (!response.ok) {
+          const errMessage = await this.getErrorMessage(response, `Groq (${model})`);
+          lastError = new Error(errMessage);
+          console.warn(`Groq model ${model} failed, trying next model:`, errMessage);
+          continue;
+        }
+
+        const data = await response.json();
+        return this.extractAssistantText(data.choices?.[0]?.message?.content);
+      } catch (error) {
+        lastError = error as Error;
+        console.warn(`Groq model ${model} fetch failed:`, error);
+      }
     }
-
-    const data = await response.json();
-    return this.extractAssistantText(data.choices?.[0]?.message?.content);
+    throw lastError || new Error('Groq failed across all available models');
   }
 
   private async generateWithClaude(apiKey: string, prompt: string): Promise<string> {
@@ -564,26 +596,38 @@ export class LLMProviderService {
   }
 
   private async generateWithOpenRouter(apiKey: string, prompt: string): Promise<string> {
-    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'auto',
-        messages: [{ role: 'user', content: prompt }],
-        temperature: 0.7,
-        max_tokens: 2000,
-      }),
-    });
+    let lastError: Error | null = null;
+    for (const model of OPENROUTER_MODELS) {
+      try {
+        const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${apiKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            model,
+            messages: [{ role: 'user', content: prompt }],
+            temperature: 0.7,
+            max_tokens: 2000,
+          }),
+        });
 
-    if (!response.ok) {
-      throw new Error(await this.getErrorMessage(response, 'OpenRouter'));
+        if (!response.ok) {
+          const errMessage = await this.getErrorMessage(response, `OpenRouter (${model})`);
+          lastError = new Error(errMessage);
+          console.warn(`OpenRouter model ${model} failed, trying next model:`, errMessage);
+          continue;
+        }
+
+        const data = await response.json();
+        return this.extractAssistantText(data.choices?.[0]?.message?.content);
+      } catch (error) {
+        lastError = error as Error;
+        console.warn(`OpenRouter model ${model} fetch failed:`, error);
+      }
     }
-
-    const data = await response.json();
-    return this.extractAssistantText(data.choices?.[0]?.message?.content);
+    throw lastError || new Error('OpenRouter failed across all available models');
   }
 
   private async generateChatResponse(
@@ -778,26 +822,38 @@ export class LLMProviderService {
     apiKey: string,
     messages: LLMChatMessage[]
   ): Promise<string> {
-    const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: GROQ_MODEL,
-        messages: this.toOpenAIMessages(messages),
-        temperature: 0.7,
-        max_tokens: 2000,
-      }),
-    });
+    let lastError: Error | null = null;
+    for (const model of GROQ_MODELS) {
+      try {
+        const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${apiKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            model,
+            messages: this.toOpenAIMessages(messages),
+            temperature: 0.7,
+            max_tokens: 2000,
+          }),
+        });
 
-    if (!response.ok) {
-      throw new Error(await this.getErrorMessage(response, 'Groq'));
+        if (!response.ok) {
+          const errMessage = await this.getErrorMessage(response, `Groq (${model})`);
+          lastError = new Error(errMessage);
+          console.warn(`Groq chat model ${model} failed, trying next:`, errMessage);
+          continue;
+        }
+
+        const data = await response.json();
+        return this.extractAssistantText(data.choices?.[0]?.message?.content);
+      } catch (error) {
+        lastError = error as Error;
+        console.warn(`Groq chat model ${model} fetch failed:`, error);
+      }
     }
-
-    const data = await response.json();
-    return this.extractAssistantText(data.choices?.[0]?.message?.content);
+    throw lastError || new Error('Groq chat failed across all available models');
   }
 
   private async generateChatWithClaude(
@@ -866,26 +922,38 @@ export class LLMProviderService {
     apiKey: string,
     messages: LLMChatMessage[]
   ): Promise<string> {
-    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'auto',
-        messages: this.toOpenAIMessages(messages),
-        temperature: 0.7,
-        max_tokens: 2000,
-      }),
-    });
+    let lastError: Error | null = null;
+    for (const model of OPENROUTER_MODELS) {
+      try {
+        const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${apiKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            model,
+            messages: this.toOpenAIMessages(messages),
+            temperature: 0.7,
+            max_tokens: 2000,
+          }),
+        });
 
-    if (!response.ok) {
-      throw new Error(await this.getErrorMessage(response, 'OpenRouter'));
+        if (!response.ok) {
+          const errMessage = await this.getErrorMessage(response, `OpenRouter (${model})`);
+          lastError = new Error(errMessage);
+          console.warn(`OpenRouter chat model ${model} failed, trying next:`, errMessage);
+          continue;
+        }
+
+        const data = await response.json();
+        return this.extractAssistantText(data.choices?.[0]?.message?.content);
+      } catch (error) {
+        lastError = error as Error;
+        console.warn(`OpenRouter chat model ${model} fetch failed:`, error);
+      }
     }
-
-    const data = await response.json();
-    return this.extractAssistantText(data.choices?.[0]?.message?.content);
+    throw lastError || new Error('OpenRouter chat failed across all available models');
   }
 
   private splitSystemInstruction(messages: LLMChatMessage[]): {
