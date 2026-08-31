@@ -10,26 +10,46 @@ import {
 const STORAGE_KEY = 'llm_usage_stats';
 const RESET_INTERVAL_MS = 24 * 60 * 60 * 1000;
 const NVIDIA_INVOKE_URL = 'https://integrate.api.nvidia.com/v1/chat/completions';
+
 const GROQ_MODELS = [
   'llama-3.3-70b-versatile',
   'llama-3.1-8b-instant',
-  'llama-3.2-3b-preview',
-  'llama-3.2-1b-preview',
   'gemma2-9b-it',
-  'deepseek-r1-distill-llama-70b',
 ] as const;
+
 const GEMINI_MODELS = [
   'gemini-2.0-flash',
   'gemini-2.0-flash-lite',
   'gemini-1.5-flash',
   'gemini-1.5-pro',
 ] as const;
+
 const OPENROUTER_MODELS = [
+  'openrouter/free',
+  'google/gemma-2-9b-it:free',
   'meta-llama/llama-3.3-70b-instruct:free',
   'meta-llama/llama-3.1-8b-instruct:free',
-  'google/gemini-2.0-flash-exp:free',
   'mistralai/mistral-7b-instruct:free',
   'auto',
+] as const;
+
+const CLAUDE_MODELS = [
+  'claude-3-5-sonnet-20241022',
+  'claude-3-5-haiku-20241022',
+  'claude-3-haiku-20240307',
+] as const;
+
+const MISTRAL_MODELS = [
+  'mistral-small-latest',
+  'open-mistral-7b',
+  'mistral-large-latest',
+  'codestral-latest',
+] as const;
+
+const NVIDIA_MODELS = [
+  'meta/llama-3.3-70b-instruct',
+  'mistralai/mistral-large-2-instruct',
+  'nvidia/llama-3.1-nemotron-70b-instruct',
 ] as const;
 
 class RateLimiter {
@@ -555,59 +575,100 @@ export class LLMProviderService {
   }
 
   private async generateWithClaude(apiKey: string, prompt: string): Promise<string> {
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-        'content-type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'claude-3-5-sonnet-20241022',
-        max_tokens: 2000,
-        messages: [{ role: 'user', content: prompt }],
-      }),
-    });
+    let lastError: Error | null = null;
+    for (const model of CLAUDE_MODELS) {
+      try {
+        const response = await fetch('https://api.anthropic.com/v1/messages', {
+          method: 'POST',
+          headers: {
+            'x-api-key': apiKey,
+            'anthropic-version': '2023-06-01',
+            'anthropic-dangerous-direct-browser-access': 'true',
+            'content-type': 'application/json',
+          },
+          body: JSON.stringify({
+            model,
+            max_tokens: 2000,
+            messages: [{ role: 'user', content: prompt }],
+          }),
+        });
 
-    if (!response.ok) {
-      throw new Error(await this.getErrorMessage(response, 'Claude'));
+        if (!response.ok) {
+          if (response.status === 401 || response.status === 403) {
+            throw new Error('Invalid or expired Anthropic Claude API key. Please check your key in Profile.');
+          }
+          const errMessage = await this.getErrorMessage(response, `Claude (${model})`);
+          lastError = new Error(errMessage);
+          console.warn(`Claude model ${model} failed, trying next:`, errMessage);
+          continue;
+        }
+
+        const data = await response.json();
+        return this.extractAssistantText(data.content?.[0]?.text);
+      } catch (error) {
+        if ((error as Error).message.includes('Invalid or expired')) {
+          throw error;
+        }
+        lastError = error as Error;
+        console.warn(`Claude model ${model} fetch failed:`, error);
+      }
     }
-
-    const data = await response.json();
-    return this.extractAssistantText(data.content?.[0]?.text);
+    throw lastError || new Error('Claude failed across all available models');
   }
 
   private async generateWithMistral(apiKey: string, prompt: string): Promise<string> {
-    const response = await fetch('https://api.mistral.ai/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'mistral-small-latest',
-        messages: [{ role: 'user', content: prompt }],
-        temperature: 0.7,
-        max_tokens: 2000,
-      }),
-    });
+    let lastError: Error | null = null;
+    for (const model of MISTRAL_MODELS) {
+      try {
+        const response = await fetch('https://api.mistral.ai/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${apiKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            model,
+            messages: [{ role: 'user', content: prompt }],
+            temperature: 0.7,
+            max_tokens: 2000,
+          }),
+        });
 
-    if (!response.ok) {
-      throw new Error(await this.getErrorMessage(response, 'Mistral'));
+        if (!response.ok) {
+          if (response.status === 401 || response.status === 403) {
+            throw new Error('Invalid or expired Mistral API key. Please check your key in Profile.');
+          }
+          const errMessage = await this.getErrorMessage(response, `Mistral (${model})`);
+          lastError = new Error(errMessage);
+          console.warn(`Mistral model ${model} failed, trying next:`, errMessage);
+          continue;
+        }
+
+        const data = await response.json();
+        return this.extractAssistantText(data.choices?.[0]?.message?.content);
+      } catch (error) {
+        if ((error as Error).message.includes('Invalid or expired')) {
+          throw error;
+        }
+        lastError = error as Error;
+        console.warn(`Mistral model ${model} fetch failed:`, error);
+      }
     }
-
-    const data = await response.json();
-    return this.extractAssistantText(data.choices?.[0]?.message?.content);
+    throw lastError || new Error('Mistral failed across all available models');
   }
 
   private async generateWithOpenRouter(apiKey: string, prompt: string): Promise<string> {
     let lastError: Error | null = null;
+    const origin = typeof window !== 'undefined' ? window.location.origin : 'https://interviewmaster.app';
+
     for (const model of OPENROUTER_MODELS) {
       try {
         const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
           method: 'POST',
           headers: {
             Authorization: `Bearer ${apiKey}`,
+            'HTTP-Referer': origin,
+            'X-Title': 'InterviewMaster AI',
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
@@ -679,10 +740,9 @@ export class LLMProviderService {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          model: 'mistralai/mistral-medium-3.5-128b',
-          reasoning_effort: 'high',
+          model: NVIDIA_MODELS[0],
           messages: this.toOpenAIMessages(messages),
-          max_tokens: 16384,
+          max_tokens: 4096,
           temperature: 0.7,
           top_p: 1,
           stream,
@@ -717,10 +777,9 @@ export class LLMProviderService {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'mistralai/mistral-medium-3.5-128b',
-        reasoning_effort: 'high',
+        model: NVIDIA_MODELS[0],
         messages: this.toOpenAIMessages(messages),
-        max_tokens: 16384,
+        max_tokens: 4096,
         temperature: 0.7,
         top_p: 1,
         stream: true,
@@ -878,61 +937,100 @@ export class LLMProviderService {
     messages: LLMChatMessage[]
   ): Promise<string> {
     const { systemInstruction, conversation } = this.splitSystemInstruction(messages);
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-        'content-type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'claude-3-5-sonnet-20241022',
-        system: systemInstruction || undefined,
-        max_tokens: 2000,
-        messages: conversation.map((message) => ({
-          role: message.role,
-          content: message.content,
-        })),
-      }),
-    });
+    let lastError: Error | null = null;
 
-    if (!response.ok) {
-      throw new Error(await this.getErrorMessage(response, 'Claude'));
+    for (const model of CLAUDE_MODELS) {
+      try {
+        const response = await fetch('https://api.anthropic.com/v1/messages', {
+          method: 'POST',
+          headers: {
+            'x-api-key': apiKey,
+            'anthropic-version': '2023-06-01',
+            'anthropic-dangerous-direct-browser-access': 'true',
+            'content-type': 'application/json',
+          },
+          body: JSON.stringify({
+            model,
+            system: systemInstruction || undefined,
+            max_tokens: 2000,
+            messages: conversation.map((message) => ({
+              role: message.role,
+              content: message.content,
+            })),
+          }),
+        });
+
+        if (!response.ok) {
+          if (response.status === 401 || response.status === 403) {
+            throw new Error('Invalid or expired Anthropic Claude API key. Please check your key in Profile.');
+          }
+          const errMessage = await this.getErrorMessage(response, `Claude (${model})`);
+          lastError = new Error(errMessage);
+          console.warn(`Claude chat model ${model} failed, trying next:`, errMessage);
+          continue;
+        }
+
+        const data = await response.json();
+        const text = Array.isArray(data.content)
+          ? data.content
+              .map((item: { text?: string }) => item?.text || '')
+              .join('')
+          : '';
+        return this.extractAssistantText(text);
+      } catch (error) {
+        if ((error as Error).message.includes('Invalid or expired')) {
+          throw error;
+        }
+        lastError = error as Error;
+        console.warn(`Claude chat model ${model} fetch failed:`, error);
+      }
     }
-
-    const data = await response.json();
-    const text = Array.isArray(data.content)
-      ? data.content
-          .map((item: { text?: string }) => item?.text || '')
-          .join('')
-      : '';
-    return this.extractAssistantText(text);
+    throw lastError || new Error('Claude chat failed across all available models');
   }
 
   private async generateChatWithMistral(
     apiKey: string,
     messages: LLMChatMessage[]
   ): Promise<string> {
-    const response = await fetch('https://api.mistral.ai/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'mistral-small-latest',
-        messages: this.toOpenAIMessages(messages),
-        temperature: 0.7,
-        max_tokens: 2000,
-      }),
-    });
+    let lastError: Error | null = null;
 
-    if (!response.ok) {
-      throw new Error(await this.getErrorMessage(response, 'Mistral'));
+    for (const model of MISTRAL_MODELS) {
+      try {
+        const response = await fetch('https://api.mistral.ai/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${apiKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            model,
+            messages: this.toOpenAIMessages(messages),
+            temperature: 0.7,
+            max_tokens: 2000,
+          }),
+        });
+
+        if (!response.ok) {
+          if (response.status === 401 || response.status === 403) {
+            throw new Error('Invalid or expired Mistral API key. Please check your key in Profile.');
+          }
+          const errMessage = await this.getErrorMessage(response, `Mistral (${model})`);
+          lastError = new Error(errMessage);
+          console.warn(`Mistral chat model ${model} failed, trying next:`, errMessage);
+          continue;
+        }
+
+        const data = await response.json();
+        return this.extractAssistantText(data.choices?.[0]?.message?.content);
+      } catch (error) {
+        if ((error as Error).message.includes('Invalid or expired')) {
+          throw error;
+        }
+        lastError = error as Error;
+        console.warn(`Mistral chat model ${model} fetch failed:`, error);
+      }
     }
-
-    const data = await response.json();
-    return this.extractAssistantText(data.choices?.[0]?.message?.content);
+    throw lastError || new Error('Mistral chat failed across all available models');
   }
 
   private async generateChatWithOpenRouter(
@@ -940,12 +1038,16 @@ export class LLMProviderService {
     messages: LLMChatMessage[]
   ): Promise<string> {
     let lastError: Error | null = null;
+    const origin = typeof window !== 'undefined' ? window.location.origin : 'https://interviewmaster.app';
+
     for (const model of OPENROUTER_MODELS) {
       try {
         const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
           method: 'POST',
           headers: {
             Authorization: `Bearer ${apiKey}`,
+            'HTTP-Referer': origin,
+            'X-Title': 'InterviewMaster AI',
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
