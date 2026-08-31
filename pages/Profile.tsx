@@ -40,10 +40,10 @@ const Profile: React.FC = () => {
   const [msg, setMsg] = useState('');
   const [visibleKeys, setVisibleKeys] = useState<Set<LLMProvider>>(new Set());
   const [apiKeys, setApiKeys] = useState<APIKeyConfig[]>(user?.preferences?.apiKeys || []);
-  const [newProvider, setNewProvider] = useState<LLMProvider>(LLMProvider.Nvidia);
+  const [newProvider, setNewProvider] = useState<LLMProvider>(LLMProvider.Gemini);
   const [newKey, setNewKey] = useState('');
   const [primaryProvider, setPrimaryProvider] = useState<LLMProvider>(
-    user?.preferences?.primaryProvider || LLMProvider.Nvidia
+    user?.preferences?.primaryProvider || LLMProvider.Gemini
   );
 
   const currentTheme = user?.preferences?.theme || 'light';

@@ -192,49 +192,81 @@ const InterviewSession: React.FC = () => {
       setReport(rep);
 
       const session: ISession = {
-          id: crypto.randomUUID(),
-          topic,
-          subTopic: selectedSubtopic,
-          difficulty: selectedDifficulty,
-          date: new Date().toISOString(),
-          score: rep.overallScore,
-          totalQuestions: finalHistory.length,
-          history: finalHistory,
-          feedbackReport: rep
+        id: crypto.randomUUID(),
+        topic,
+        subTopic: selectedSubtopic,
+        difficulty: selectedDifficulty,
+        date: new Date().toISOString(),
+        score: rep.overallScore,
+        totalQuestions: finalHistory.length,
+        history: finalHistory,
+        feedbackReport: rep,
       };
       StorageService.saveSession(session);
     } catch (e) {
-      console.error("Report generation failed", e);
+      console.error('Report generation failed, using local score computation', e);
+      const correctCount = finalHistory.filter((h) => h.isCorrect).length;
+      const score = Math.round((correctCount / Math.max(1, finalHistory.length)) * 100);
+      const fallbackReport: InterviewReport = {
+        overallScore: score,
+        summary: `You completed the ${selectedDifficulty} level assessment on ${topic} (${selectedSubtopic}) answering ${correctCount} of ${finalHistory.length} questions correctly.`,
+        strongAreas: finalHistory.filter((h) => h.isCorrect).map((_, i) => `Question ${i + 1} mastery`),
+        weakAreas: finalHistory.filter((h) => !h.isCorrect).map((_, i) => `Question ${i + 1} review needed`),
+        suggestedResources: [
+          {
+            title: `${topic} Documentation & Guides`,
+            url: `https://www.google.com/search?q=${encodeURIComponent(topic + ' interview preparation guide')}`,
+          },
+        ],
+      };
+      setReport(fallbackReport);
+      const session: ISession = {
+        id: crypto.randomUUID(),
+        topic,
+        subTopic: selectedSubtopic,
+        difficulty: selectedDifficulty,
+        date: new Date().toISOString(),
+        score,
+        totalQuestions: finalHistory.length,
+        history: finalHistory,
+        feedbackReport: fallbackReport,
+      };
+      StorageService.saveSession(session);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   if (step === 'topic') {
     return (
       <div className="max-w-2xl mx-auto mt-10 px-4">
         <h1 className="text-3xl font-bold text-gray-900 dark:text-slate-100 mb-6">Start a New Interview</h1>
-        
+
         {feedback && (
-          <div className={`mb-6 p-4 rounded-lg flex items-center gap-3 ${
-            feedback.type === 'error' ? 'bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800' : 'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800'
-          }`}>
-             {feedback.type === 'error' ? <XCircle size={20} /> : <Info size={20} />}
-             <p>{feedback.message}</p>
+          <div
+            className={`mb-6 p-4 rounded-lg flex items-center gap-3 ${
+              feedback.type === 'error'
+                ? 'bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800'
+                : 'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800'
+            }`}
+          >
+            {feedback.type === 'error' ? <XCircle size={20} /> : <Info size={20} />}
+            <p>{feedback.message}</p>
           </div>
         )}
 
         <div className="bg-white dark:bg-slate-900 p-8 rounded-xl shadow-sm border border-gray-200 dark:border-slate-800">
           <label className="block text-lg font-medium text-gray-700 dark:text-slate-300 mb-4">What topic do you want to practice?</label>
           <div className="flex flex-col sm:flex-row gap-4">
-            <input 
-              type="text" 
+            <input
+              type="text"
               value={topic}
               onChange={(e) => setTopic(e.target.value)}
               placeholder="e.g. React, Python, System Design, AWS"
               className="flex-1 px-4 py-3 text-lg text-gray-900 dark:text-slate-100 bg-white dark:bg-slate-800 border border-gray-300 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
               onKeyDown={(e) => e.key === 'Enter' && handleTopicSubmit()}
             />
-            <button 
+            <button
               onClick={handleTopicSubmit}
               disabled={loading || !topic}
               className="px-8 py-3 bg-indigo-600 text-white rounded-lg font-bold hover:bg-indigo-700 disabled:opacity-50 transition-colors"
@@ -250,7 +282,6 @@ const InterviewSession: React.FC = () => {
   if (step === 'subtopic') {
     return (
       <div className="max-w-4xl mx-auto mt-10 px-4">
-        <h2 className="text-2xl font-bold text-gray-900 dark:text-slate-100 mb-6">Select a Focus Area for {topic}</h2>
         
         {feedback && (
           <div className={`mb-6 p-4 rounded-lg flex items-center gap-3 ${
@@ -607,7 +638,19 @@ const InterviewSession: React.FC = () => {
       )
   }
 
-  return <div>Loading...</div>;
+  return (
+    <div className="min-h-[60vh] flex flex-col items-center justify-center p-8 text-center">
+      <div className="w-12 h-12 border-4 border-indigo-200 dark:border-indigo-800 border-t-indigo-600 dark:border-t-indigo-400 rounded-full animate-spin mb-4" />
+      <h3 className="text-xl font-bold text-gray-800 dark:text-slate-200 mb-2">
+        {step === 'report' ? 'Generating Your Assessment Report...' : 'Loading Interview Session...'}
+      </h3>
+      <p className="text-sm text-gray-500 dark:text-slate-400 max-w-md">
+        {step === 'report'
+          ? 'Analyzing your responses, identifying growth areas, and curating personalized learning resources.'
+          : 'Connecting to AI provider and preparing your session.'}
+      </p>
+    </div>
+  );
 };
 
 export default InterviewSession;
